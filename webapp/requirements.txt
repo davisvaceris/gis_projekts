@@ -1,0 +1,5 @@
+Flask==2.3.3
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.21
+GeoAlchemy2==0.14.1
+requests==2.31.0
