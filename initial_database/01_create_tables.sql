@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS postgis;
 
-CREATE TABLE IF NOT EXISTS planted_tress (
+CREATE TABLE IF NOT EXISTS planted_trees (
     id INTEGER PRIMARY KEY,
     src TEXT,
     n INTEGER,
@@ -8,4 +8,4 @@ CREATE TABLE IF NOT EXISTS planted_tress (
     geom GEOMETRY(Point, 4326)
 );
 
-CREATE INDEX IF NOT EXISTS citizen_actions_geom_idx ON citizen_actions USING GIST (geom);
+CREATE INDEX IF NOT EXISTS planted_trees_geom_idx ON planted_trees USING GIST (geom);
