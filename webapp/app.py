@@ -1,7 +1,8 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 import psycopg2
 import requests
 import time
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 
@@ -52,40 +53,62 @@ def import_data(cur):
     url = "https://discomap.eea.europa.eu/Map/MapMyTreeAPI/CitizenAction"
     print(f"Fetching data from {url}...")
 
-    response = requests.get(
-    url,
-    headers={
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-    },
-    timeout=30
-)
-    response.raise_for_status()  # raises if status != 200
+    try:
+        response = requests.get(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/json"
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+        print(f"API returned {len(data)} records. Processing...")
 
-    data = response.json()
-    print(f"API returned {len(data)} records. Inserting...")
+        inserted = 0
+        for item in data:
+            cur.execute("""
+                        INSERT INTO planted_trees (id, src, n, reporting_date, geom)
+                        VALUES (%s, %s, %s, %s, ST_SetSRID(ST_Point(%s, %s), 4326))
+                        ON CONFLICT (id) DO UPDATE SET
+                            src = EXCLUDED.src,
+                            n = EXCLUDED.n,
+                            reporting_date = EXCLUDED.reporting_date,
+                            geom = EXCLUDED.geom;
+                        """, (
+                            item.get('id'),
+                            item.get('src'),
+                            item.get('n'),
+                            item.get('reportingDate'),
+                            item.get('lon'),
+                            item.get('lat')
+                        ))
+            inserted += 1
 
-    # Debug: print first record to verify field names
-    if data:
-        print(f"Sample record: {data[0]}")
+        print(f"Done. {inserted} records processed.")
+        return inserted
+    except Exception as e:
+        print(f"Error importing data: {e}")
+        raise
 
-    inserted = 0
-    for item in data:
-        cur.execute("""
-                    INSERT INTO planted_trees (id, src, n, reporting_date, geom)
-                    VALUES (%s, %s, %s, %s, ST_SetSRID(ST_Point(%s, %s), 4326)) ON CONFLICT (id) DO NOTHING;
-                    """, (
-                        item.get('id'),
-                        item.get('src'),
-                        item.get('n'),
-                        item.get('reportingDate'),
-                        item.get('lon'),
-                        item.get('lat')
-                    ))
-        inserted += 1
 
-    print(f"Done. {inserted} records processed.")
-    return inserted
+def update_trees_job():
+    """Job to be run every hour."""
+    print("Starting scheduled update job...")
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        import_data(cur)
+        conn.commit()
+        cur.close()
+        print("Scheduled update job finished successfully.")
+    except Exception as e:
+        print(f"Scheduled update job failed: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 
 def init_data():
@@ -105,7 +128,7 @@ def init_data():
             count = cur.fetchone()[0]
 
             if count > 0:
-                print(f"Data already present ({count} records). Skipping import.")
+                print(f"Data already present ({count} records). Skipping initial full import.")
             else:
                 import_data(cur)
                 conn.commit()
@@ -128,7 +151,15 @@ def init_data():
 
 
 @app.route('/')
-def index():
+@app.route('/front')
+def map_page():
+    """Render the map page."""
+    return render_template('index.html')
+
+
+@app.route('/status')
+def status():
+    """Return DB status JSON."""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -154,7 +185,7 @@ def get_trees():
         cur.execute("""
                     SELECT json_build_object(
                                    'type', 'FeatureCollection',
-                                   'features', json_agg(
+                                   'features', COALESCE(json_agg(
                                            json_build_object(
                                                    'type', 'Feature',
                                                    'geometry', ST_AsGeoJSON(geom)::json,
@@ -165,7 +196,7 @@ def get_trees():
                                                            'reporting_date', reporting_date
                                                                  )
                                            )
-                                               )
+                                               ), '[]'::json)
                            )
                     FROM planted_trees;
                     """)
@@ -178,5 +209,16 @@ def get_trees():
 
 
 if __name__ == '__main__':
+    # Initial data setup
     init_data()
-    app.run(host='0.0.0.0', port=5000)
+
+    # Setup background scheduler
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=update_trees_job, trigger="interval", hours=1)
+    scheduler.start()
+
+    # Run Flask app
+    try:
+        app.run(host='0.0.0.0', port=5000)
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()

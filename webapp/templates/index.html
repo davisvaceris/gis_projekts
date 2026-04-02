@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tree Map with Timeline</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        .info-box {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            z-index: 1000;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+        .timeline-container {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px 25px;
+            z-index: 1000;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        #timeline-slider {
+            width: 100%;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        .date-display {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #228B22;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-box">
+        <h3>Planted Trees</h3>
+        <p>Showing trees reported until: <span id="current-date-display" class="date-display">-</span></p>
+        <p>Total visible: <span id="visible-count" style="font-weight: bold;">0</span></p>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="timeline-container">
+        <div>Slide to filter by reporting date</div>
+        <input type="range" id="timeline-slider" min="0" max="100" value="100">
+        <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: #666;">
+            <span id="start-date">-</span>
+            <span id="end-date">-</span>
+        </div>
+    </div>
+
+    <script>
+        const map = L.map('map').setView([50.0, 10.0], 4);
+        let geoJsonLayer;
+        let allData;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        function updateMap(maxTimestamp) {
+            if (geoJsonLayer) {
+                map.removeLayer(geoJsonLayer);
+            }
+
+            const filteredData = {
+                type: "FeatureCollection",
+                features: allData.features.filter(f => {
+                    const reportDate = new Date(f.properties.reporting_date).getTime();
+                    return reportDate <= maxTimestamp;
+                })
+            };
+
+            document.getElementById('visible-count').textContent = filteredData.features.length;
+            document.getElementById('current-date-display').textContent = new Date(maxTimestamp).toLocaleDateString();
+
+            geoJsonLayer = L.geoJSON(filteredData, {
+                pointToLayer: function (feature, latlng) {
+                    return L.circleMarker(latlng, {
+                        radius: 5,
+                        fillColor: "#228B22",
+                        color: "#000",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    });
+                },
+                onEachFeature: function (feature, layer) {
+                    if (feature.properties) {
+                        layer.bindPopup(`
+                            <strong>Count:</strong> ${feature.properties.n}<br>
+                            <strong>Date:</strong> ${new Date(feature.properties.reporting_date).toLocaleDateString()}
+                        `);
+                    }
+                }
+            }).addTo(map);
+        }
+
+        fetch('/trees')
+            .then(response => response.json())
+            .then(data => {
+                allData = data;
+                if (!data.features || data.features.length === 0) return;
+
+                // Sort and find date range
+                const timestamps = data.features.map(f => new Date(f.properties.reporting_date).getTime());
+                const minTime = Math.min(...timestamps);
+                const maxTime = Math.max(...timestamps);
+
+                const slider = document.getElementById('timeline-slider');
+                slider.min = minTime;
+                slider.max = maxTime;
+                slider.value = maxTime;
+
+                document.getElementById('start-date').textContent = new Date(minTime).toLocaleDateString();
+                document.getElementById('end-date').textContent = new Date(maxTime).toLocaleDateString();
+
+                slider.addEventListener('input', (e) => {
+                    updateMap(parseInt(e.target.value));
+                });
+
+                updateMap(maxTime);
+            })
+            .catch(err => console.error('Error loading tree data:', err));
+    </script>
+</body>
+</html>
