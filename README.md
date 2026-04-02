@@ -37,5 +37,6 @@ The project is containerized for easy deployment and uses a robust geospatial ba
 ### 1. Prerequisites
 * Docker & Docker Compose installed.
 * Basic understanding of SQL and GIS.
-
 * clone repo and run docker
+
+## Note: This project is created strictly for educational purposes. The use of real-world data from the EEA is intended for self-education in GIS workflows and system integration. All rights to the data belong to the respective European environmental agencies.
