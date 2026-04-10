@@ -1,4 +1,4 @@
-from flask import Flask, Response, jsonify, render_template
+from flask import Flask, request, Response, jsonify, render_template
 import psycopg2
 import requests
 import time
@@ -220,6 +220,13 @@ def get_trees():
         return jsonify(result)
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/corine-proxy')
+def corine_proxy():
+    url = "https://image.discomap.eea.europa.eu/arcgis/services/Corine/CLC2018_WM/MapServer/WMSServer"
+    params = request.args.to_dict()
+    r = requests.get(url, params=params)
+    return Response(r.content, content_type=r.headers['Content-Type'])
 
 
 if __name__ == '__main__':
