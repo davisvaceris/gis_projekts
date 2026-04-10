@@ -3,139 +3,163 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tree Map with Timeline</title>
+    <title>Tree Map with Timeline & Clustering</title>
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="../static/map.css" />
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; }
-        #map { height: 100vh; width: 100%; }
-        .info-box {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: white;
-            padding: 10px;
-            z-index: 1000;
-            border-radius: 5px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-        }
-        .timeline-container {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80%;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 15px 25px;
-            z-index: 1000;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.3);
-            text-align: center;
-        }
-        #timeline-slider {
-            width: 100%;
-            margin: 10px 0;
-            cursor: pointer;
-        }
-        .date-display {
-            font-weight: bold;
-            font-size: 1.1em;
-            color: #228B22;
-        }
-    </style>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 </head>
 <body>
+    <a href="/" class="back-button">← Back to Home</a>
+
     <div class="info-box">
-        <h3>Planted Trees</h3>
-        <p>Showing trees reported until: <span id="current-date-display" class="date-display">-</span></p>
-        <p>Total visible: <span id="visible-count" style="font-weight: bold;">0</span></p>
+        <h3 style="margin-top: 0; color: #228B22;">Planted Trees</h3>
+        <p>Reporting until: <span id="current-date-display" class="date-display">-</span></p>
+        <p style="margin-bottom: 0;">Visible reports: <span id="visible-count" style="font-weight: bold;">0</span></p>
     </div>
 
     <div id="map"></div>
 
     <div class="timeline-container">
-        <div>Slide to filter by reporting date</div>
+        <div style="font-size: 0.9em; color: #444;">Drag slider to filter by reporting date</div>
         <input type="range" id="timeline-slider" min="0" max="100" value="100">
-        <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: #666;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: #666; font-weight: bold;">
             <span id="start-date">-</span>
             <span id="end-date">-</span>
         </div>
     </div>
 
-    <script>
-        const map = L.map('map').setView([50.0, 10.0], 4);
-        let geoJsonLayer;
-        let allData;
+<script>
+    const map = L.map('map', {
+        maxZoom: 19,
+        zoomControl: false // Move zoom control to avoid overlap if needed
+    }).setView([50.0, 10.0], 4);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+    // Add zoom control at bottom right to stay away from layers control
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        function updateMap(maxTimestamp) {
-            if (geoJsonLayer) {
-                map.removeLayer(geoJsonLayer);
-            }
+    const markerClusterLayer = L.markerClusterGroup({
+        maxClusterRadius: 50,
+        showCoverageOnHover: false,
+        spiderfyOnMaxZoom: true
+    }).addTo(map);
 
-            const filteredData = {
-                type: "FeatureCollection",
-                features: allData.features.filter(f => {
-                    const reportDate = new Date(f.properties.reporting_date).getTime();
-                    return reportDate <= maxTimestamp;
-                })
-            };
+    let allData;
 
-            document.getElementById('visible-count').textContent = filteredData.features.length;
-            document.getElementById('current-date-display').textContent = new Date(maxTimestamp).toLocaleDateString();
+    const osmBase = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
 
-            geoJsonLayer = L.geoJSON(filteredData, {
-                pointToLayer: function (feature, latlng) {
-                    return L.circleMarker(latlng, {
-                        radius: 5,
-                        fillColor: "#228B22",
-                        color: "#000",
-                        weight: 1,
-                        opacity: 1,
-                        fillOpacity: 0.8
-                    });
-                },
-                onEachFeature: function (feature, layer) {
-                    if (feature.properties) {
-                        layer.bindPopup(`
-                            <strong>Count:</strong> ${feature.properties.n}<br>
-                            <strong>Date:</strong> ${new Date(feature.properties.reporting_date).toLocaleDateString()}
-                        `);
-                    }
-                }
-            }).addTo(map);
-        }
+    const satBase = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community'
+    });
 
-        fetch('/trees')
-            .then(response => response.json())
-            .then(data => {
-                allData = data;
-                if (!data.features || data.features.length === 0) return;
+    // Corine Land Cover 2018 WMS Layer
+    const corineWMS = L.tileLayer.wms("https://image.discomap.eea.europa.eu/arcgis/services/Corine/CLC2018_WM/MapServer/WMSServer", {
+        layers: '1',
+        format: 'image/png',
+        transparent: true,
+        version: '1.3.0',
+        attribution: "European Environment Agency (EEA)"
+    });
 
-                // Sort and find date range
-                const timestamps = data.features.map(f => new Date(f.properties.reporting_date).getTime());
-                const minTime = Math.min(...timestamps);
-                const maxTime = Math.max(...timestamps);
+    // Administrative Units WMS Layer from local GeoServer
+    const adminUnitsWMS = L.tileLayer.wms("http://localhost:8080/geoserver/wms", {
+        layers: 'koku_projekts:europe_adm_units',
+        format: 'image/png',
+        transparent: true,
+        version: '1.1.1',
+        attribution: "GeoServer"
+    });
 
-                const slider = document.getElementById('timeline-slider');
-                slider.min = minTime;
-                slider.max = maxTime;
-                slider.value = maxTime;
+    const baseLayers = {
+        "🗺️ Street Map": osmBase,
+        "🛰️ Satellite Imagery": satBase
+    };
 
-                document.getElementById('start-date').textContent = new Date(minTime).toLocaleDateString();
-                document.getElementById('end-date').textContent = new Date(maxTime).toLocaleDateString();
+    const overlayLayers = {
+        "🌳 Tree Planting Reports": markerClusterLayer,
+        "🏛️ Administrative Units": adminUnitsWMS,
+        "🌍 Corine Land Cover 2018": corineWMS
+    };
 
-                slider.addEventListener('input', (e) => {
-                    updateMap(parseInt(e.target.value));
+    // Initialize layer control with better design
+    L.control.layers(baseLayers, overlayLayers, {
+        collapsed: false,
+        position: 'topleft' // Move it away from info-box
+    }).addTo(map);
+
+    function updateMap(maxTimestamp) {
+        if (!allData) return;
+
+        markerClusterLayer.clearLayers();
+
+        const filteredFeatures = allData.features.filter(f => {
+            const reportDate = new Date(f.properties.reporting_date).getTime();
+            return reportDate <= maxTimestamp;
+        });
+
+        document.getElementById('visible-count').textContent = filteredFeatures.length.toLocaleString();
+        document.getElementById('current-date-display').textContent = new Date(maxTimestamp).toLocaleDateString();
+
+        const geoJsonLayer = L.geoJSON(filteredFeatures, {
+            pointToLayer: function (feature, latlng) {
+                return L.circleMarker(latlng, {
+                    radius: 6,
+                    fillColor: "#228B22",
+                    color: "#fff",
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
                 });
+            },
+            onEachFeature: function (feature, layer) {
+                if (feature.properties) {
+                    layer.bindPopup(`
+                        <div style="font-family: sans-serif;">
+                            <strong style="color: #228B22;">Tree Report</strong><br>
+                            <strong>Source:</strong> ${feature.properties.src}<br>
+                            <strong>Planted:</strong> ${feature.properties.n} trees<br>
+                            <strong>Report Date:</strong> ${new Date(feature.properties.reporting_date).toLocaleDateString()}
+                        </div>
+                    `);
+                }
+            }
+        });
 
-                updateMap(maxTime);
-            })
-            .catch(err => console.error('Error loading tree data:', err));
-    </script>
+        markerClusterLayer.addLayer(geoJsonLayer);
+    }
+
+    fetch('/trees')
+    .then(response => response.json())
+    .then(data => {
+        allData = data;
+        if (!data.features || data.features.length === 0) return;
+
+        const timestamps = data.features.map(f => new Date(f.properties.reporting_date).getTime());
+        const minTime = Math.min(...timestamps);
+        const maxTime = Math.max(...timestamps);
+
+        const slider = document.getElementById('timeline-slider');
+        slider.min = minTime;
+        slider.max = maxTime;
+        slider.value = maxTime;
+
+        document.getElementById('start-date').textContent = new Date(minTime).toLocaleDateString();
+        document.getElementById('end-date').textContent = new Date(maxTime).toLocaleDateString();
+
+        slider.addEventListener('input', (e) => {
+            updateMap(parseInt(e.target.value));
+        });
+
+        updateMap(maxTime);
+    })
+    .catch(err => console.error('Error loading tree data:', err));
+</script>
 </body>
 </html>

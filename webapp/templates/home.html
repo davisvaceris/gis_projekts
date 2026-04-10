@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tree Project - Home</title>
+    <link rel="stylesheet" href="../static/front.css" />
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to the Tree Tracker</h1>
+        <p>Explore tree planting initiatives across Europe with our interactive map. Track the progress from the first report to the latest plantings using our historical timeline.</p>
+
+        <a href="/map" class="nav-button">View Tree Map</a>
+
+        <a href="/statistics" class="nav-button">View Statistics</a>
+
+        <div class="stats" id="stats-box">
+            <div class="stats-radial">
+                <svg width="120" height="120" viewBox="0 0 80 80" id="stats-ring">
+                    <circle cx="40" cy="40" r="34" fill="none" stroke-width="7" stroke="#E1F5EE" />
+                    <circle cx="40" cy="40" r="34" fill="none" stroke-width="7" stroke="#1D9E75"
+                        stroke-dasharray="213.628"
+                        stroke-dashoffset="213.628"
+                        stroke-linecap="round"
+                        transform="rotate(-90 40 40)"
+                        id="stats-arc" />
+                    <text x="40" y="45" text-anchor="middle" font-size="11" font-weight="500"
+                        fill="#1D9E75" id="stats-pct">...</text>
+                </svg>
+                <div class="stats-text">
+                    <div class="stats-count" id="stats-count">Loading...</div>
+                    <div class="stats-label">trees planted of 1,000,000,000 goal</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const planted = data.total_trees_planted;
+                    const goal = 1000000000;
+                    const pct = planted / goal;
+                    const circumference = 213.628;
+                    const offset = circumference * (1 - pct);
+
+                    document.getElementById('stats-count').textContent = planted.toLocaleString();
+                    document.getElementById('stats-arc').style.strokeDashoffset = offset;
+                    document.getElementById('stats-pct').textContent =
+                        pct < 0.001
+                            ? (pct * 100).toFixed(3) + '%'
+                            : (pct * 100).toFixed(2) + '%';
+                }
+            })
+            .catch(err => console.error('Error fetching stats:', err));
+    </script>
+</body>
+</html>

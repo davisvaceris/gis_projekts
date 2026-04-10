@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template
+from flask import Flask, Response, jsonify, render_template
 import psycopg2
 import requests
 import time
@@ -151,10 +151,21 @@ def init_data():
 
 
 @app.route('/')
-@app.route('/front')
+def home_page():
+    """Render the home page."""
+    return render_template('home.html')
+
+
+@app.route('/map')
 def map_page():
     """Render the map page."""
     return render_template('index.html')
+
+
+@app.route('/statistics')
+def statistics_page():
+    """Render the statistics page."""
+    return render_template('statistics.html')
 
 
 @app.route('/status')
@@ -165,12 +176,15 @@ def status():
         cur = conn.cursor()
         cur.execute('SELECT COUNT(*) FROM planted_trees;')
         count = cur.fetchone()[0]
+        cur.execute('SELECT COALESCE(SUM(n), 0) FROM planted_trees;')
+        sum_trees = cur.fetchone()[0]
         cur.close()
         conn.close()
         return jsonify({
             "status": "success",
             "message": "Connected to PostGIS!",
-            "records_count": count
+            "records_count": count,
+            "total_trees_planted": sum_trees
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

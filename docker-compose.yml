@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: gis_db
     ports:
-      - "5432:5432"
+      - "5132:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./initial_database:/docker-entrypoint-initdb.d
@@ -25,7 +25,7 @@ services:
 
   geoserver:
     image: kartoza/geoserver
-    container_name: gis_geoserver
+    container_name: geoserver
     environment:
       - POSTGRES_ADDR=db
       - POSTGRES_PORT=5432

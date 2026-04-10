@@ -1,0 +1,100 @@
+body { margin: 0; padding: 0; font-family: sans-serif; overflow: hidden; }
+#map { height: 100vh; width: 100%; }
+
+.info-box {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: white;
+    padding: 15px;
+    z-index: 1000;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    max-width: 250px;
+}
+
+.back-button {
+    position: absolute;
+    top: 20px;
+    left: 245px;
+    background: white;
+    padding: 10px 20px;
+    z-index: 1000;
+    border-radius: 25px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    text-decoration: none;
+    color: #333;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    transition: background-color 0.2s;
+}
+
+.back-button:hover {
+    background-color: #f0f0f0;
+}
+
+.timeline-container {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 15px 30px;
+    z-index: 1000;
+    border-radius: 12px;
+    box-shadow: 0 0 25px rgba(0,0,0,0.3);
+    text-align: center;
+}
+
+#timeline-slider {
+    width: 100%;
+    margin: 15px 0;
+    cursor: pointer;
+    accent-color: #228B22;
+}
+
+.date-display {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #228B22;
+}
+
+/* Custom styles for Leaflet Layers Control */
+.leaflet-control-layers {
+    border: none !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+    border-radius: 8px !important;
+    padding: 10px !important;
+}
+
+.leaflet-control-layers-expanded {
+    background: white !important;
+    color: #333 !important;
+    font-family: sans-serif !important;
+}
+
+.leaflet-control-layers-group-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+    display: block;
+    color: #228B22;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 3px;
+}
+
+.leaflet-control-layers-selector {
+    margin-top: 2px !important;
+}
+
+.leaflet-control-layers label {
+    margin-bottom: 5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.leaflet-control-layers label span {
+    margin-left: 8px;
+}
