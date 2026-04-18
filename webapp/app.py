@@ -47,6 +47,23 @@ def init_db(cur):
                     ON planted_trees USING GIST (geom);
                 """)
 
+def update_trees_job():
+    """Runs every hour — imports new data and refreshes views."""
+    print("Starting scheduled update job...")
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        import_data(cur)
+        refresh_views(cur)
+        conn.commit()
+        cur.close()
+        print("Scheduled update job finished successfully.")
+    except Exception as e:
+        print(f"Scheduled update job failed: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 def import_data(cur):
     """Fetch from API and insert records."""
@@ -101,6 +118,7 @@ def update_trees_job():
         conn = get_db_connection()
         cur = conn.cursor()
         import_data(cur)
+        refresh_views(cur)
         conn.commit()
         cur.close()
         print("Scheduled update job finished successfully.")
@@ -110,6 +128,31 @@ def update_trees_job():
         if conn:
             conn.close()
 
+def refresh_views(cur):
+    """Internal function used by scheduler and init_data."""
+    views = [
+        'mv_trees_base',
+        'mv_trees_by_land_cover_l1',
+        'mv_trees_by_land_cover_l2',
+        'mv_trees_by_land_cover_l3',
+    ]
+    for view in views:
+        print(f"Refreshing {view}...")
+        cur.execute(f"REFRESH MATERIALIZED VIEW {view};")
+
+    indexes = [
+        'planted_trees_geom_idx',
+        'corine_land_cover_geom_idx',
+    ]
+    for index in indexes:
+        print(f"Reindexing {index}...")
+        cur.execute(f"REINDEX INDEX {index};")
+
+    tables = ['planted_trees', 'corine_land_cover', 'clc_data']
+    for table in tables:
+        cur.execute(f"ANALYZE public.{table};")
+
+    print("All views refreshed, indexes reindexed, tables analyzed.")
 
 def init_data():
     print("Waiting for database...")
@@ -126,6 +169,11 @@ def init_data():
             # Check if data already exists
             cur.execute("SELECT COUNT(*) FROM planted_trees;")
             count = cur.fetchone()[0]
+
+            cur.execute("REFRESH MATERIALIZED VIEW mv_trees_by_land_cover_l1;")
+            cur.execute("REFRESH MATERIALIZED VIEW mv_trees_by_land_cover_l2;")
+            cur.execute("REFRESH MATERIALIZED VIEW mv_trees_by_land_cover_l3;")
+            conn.commit()
 
             if count > 0:
                 print(f"Data already present ({count} records). Skipping initial full import.")
@@ -221,25 +269,154 @@ def get_trees():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+@app.route('/api/stats/corine')
+def get_corine_stats():
+    level = request.args.get('level', '1')
+    if level not in ['1', '2', '3']:
+        level = '1'
+
+    view_map = {
+        '1': 'mv_trees_by_land_cover_l1',
+        '2': 'mv_trees_by_land_cover_l2',
+        '3': 'mv_trees_by_land_cover_l3',
+    }
+    view_name = view_map[level]
+
+    query = f"SELECT planted_trees, label, rgb FROM {view_name} ORDER BY planted_trees DESC;"
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(query)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        return jsonify([
+            {
+                "planted_trees": row[0],
+                "label": row[1],
+                "rgb": row[2]
+            }
+            for row in rows
+        ])
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/refresh-views')
+def refresh_views(cur):
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Refresh materialized views in order
+        views = [
+            'mv_trees_base',
+            'mv_trees_by_land_cover_l1',
+            'mv_trees_by_land_cover_l2',
+            'mv_trees_by_land_cover_l3',
+        ]
+        for view in views:
+            print(f"Refreshing {view}...")
+            cur.execute(f"REFRESH MATERIALIZED VIEW {view};")
+        print("All views refreshed.")
+
+        # Reindex spatial indexes
+        indexes = [
+            'planted_trees_geom_idx',
+            'corine_land_cover_geom_idx',
+        ]
+        for index in indexes:
+            print(f"Reindexing {index}...")
+            cur.execute(f"REINDEX INDEX {index};")
+        print("All indexes reindexed.")
+
+        # Update statistics
+        tables = [
+            'planted_trees',
+            'corine_land_cover',
+            'clc_data',
+        ]
+        for table in tables:
+            print(f"Analyzing {table}...")
+            cur.execute(f"ANALYZE public.{table};")
+        print("All tables analyzed.")
+
+        conn.commit()
+        cur.close()
+
+        return jsonify({
+            "status": "success",
+            "message": "Views refreshed, indexes reindexed, statistics updated"
+        })
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Refresh failed: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+    finally:
+        if conn:
+            conn.close()
+
 @app.route('/corine-proxy')
 def corine_proxy():
     url = "https://image.discomap.eea.europa.eu/arcgis/services/Corine/CLC2018_WM/MapServer/WMSServer"
     params = request.args.to_dict()
     r = requests.get(url, params=params)
     return Response(r.content, content_type=r.headers['Content-Type'])
+@app.route('/api/refresh')
+def manual_refresh():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        imported = import_data(cur)
+        refresh_views(cur)
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"status": "success", "records": imported})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/scheduler/status')
+def scheduler_status():
+    """Check scheduler status and next run time."""
+    jobs = scheduler.get_jobs()
+    return jsonify({
+        "scheduler_running": scheduler.running,
+        "jobs": [
+            {
+                "id": job.id,
+                "next_run": str(job.next_run_time),
+                "trigger": str(job.trigger)
+            }
+            for job in jobs
+        ]
+    })
+scheduler = BackgroundScheduler()
+scheduler.add_job(
+    func=update_trees_job,
+    trigger="interval",
+    hours=1,
+    id="update_trees",
+    max_instances=1,
+    misfire_grace_time=300
+)
 
 
 if __name__ == '__main__':
     # Initial data setup
     init_data()
 
-    # Setup background scheduler
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(func=update_trees_job, trigger="interval", hours=1)
     scheduler.start()
+    print("Scheduler started. Update job runs every hour.")
 
-    # Run Flask app
     try:
-        app.run(host='0.0.0.0', port=5000)
+        app.run(host='0.0.0.0', port=5000, use_reloader=False)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()
+        print("Scheduler stopped.")

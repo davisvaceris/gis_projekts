@@ -14,6 +14,10 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 </head>
 <body>
+    <div class="translate-container">
+        <div id="google_translate_element"></div>
+    </div>
+
     <a href="/" class="back-button">← Back to Home</a>
 
     <div class="info-box">
@@ -33,13 +37,24 @@
         </div>
     </div>
 
+<script type="text/javascript">
+    function googleTranslateElementInit() {
+        new google.translate.TranslateElement({
+            pageLanguage: 'en',
+            includedLanguages: 'en,lv',
+            layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+            autoDisplay: false
+        }, 'google_translate_element');
+    }
+</script>
+<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+
 <script>
     const map = L.map('map', {
         maxZoom: 19,
-        zoomControl: false // Move zoom control to avoid overlap if needed
+        zoomControl: false
     }).setView([50.0, 10.0], 4);
 
-    // Add zoom control at bottom right to stay away from layers control
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     const markerClusterLayer = L.markerClusterGroup({

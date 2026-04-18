@@ -6,95 +6,62 @@
     <title>Tree Project - Statistics</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f7f6;
-            color: #333;
-        }
-        .header {
-            background-color: #228B22;
-            color: white;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .back-button {
-            color: white;
-            text-decoration: none;
-            font-weight: bold;
-            border: 1px solid white;
-            padding: 5px 15px;
-            border-radius: 20px;
-        }
-        .content {
-            padding: 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .tabs {
-            display: flex;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #ddd;
-        }
-        .tab {
-            padding: 10px 25px;
-            cursor: pointer;
-            font-weight: bold;
-            color: #666;
-            transition: 0.3s;
-        }
-        .tab.active {
-            color: #228B22;
-            border-bottom: 3px solid #228B22;
-        }
-        .tab-content {
-            display: none;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        .tab-content.active {
-            display: block;
-        }
-        #map-admin, #map-density {
-            height: 500px;
-            width: 100%;
-            border-radius: 8px;
-        }
-    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="../static/statistics.css" />
 </head>
 <body>
     <div class="header">
         <h1>Tree Statistics</h1>
-        <a href="/" class="back-button">← Back Home</a>
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <div id="google_translate_element"></div>
+            <a href="/" class="back-button">← Back Home</a>
+        </div>
     </div>
 
     <div class="content">
         <div class="tabs">
-            <div class="tab active" onclick="showTab('admin-units', this)">Trees by Country</div>
-            <div class="tab" onclick="showTab('density', this)">Density by Region</div>
+<!--            <div class="tab active" onclick="showTab('admin-units', this)">Trees by Country</div>-->
+<!--            <div class="tab" onclick="showTab('density', this)">Density by Region</div>-->
+            <div class="tab active" onclick="showTab('corine', this)">Land Cover Types</div>
         </div>
 
-        <div id="admin-units" class="tab-content active">
+        <div id="admin-units" class="tab-content">
             <h3>Tree Planting by Administrative Units</h3>
             <p>Visualizing total trees planted based on <code>koku_projekts:europe_adm_units</code>.</p>
             <div id="map-admin"></div>
         </div>
 
-        <div id="density" class="tab-content">
-            <h3>Tree Density per Region</h3>
-            <p>Visualizing planting density based on <code>koku_projekts:koku_blivums_pa_regioniem</code>.</p>
-            <div id="map-density"></div>
+        <div id="corine" class="tab-content active">
+            <h3>Trees Planted by Corine Land Cover Type</h3>
+            <div class="corine-stats-container">
+                <div class="depth-selector">
+                    <strong>Classification Depth:</strong>
+                    <button class="depth-btn active" onclick="updateCorineStats(1, this)">Level 1</button>
+                    <button class="depth-btn" onclick="updateCorineStats(2, this)">Level 2</button>
+                    <button class="depth-btn" onclick="updateCorineStats(3, this)">Level 3</button>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="corineChart"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'en,lv',
+                layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+
     <script>
         let maps = {};
+        let corineChart = null;
 
         function showTab(tabId, element) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -103,9 +70,12 @@
             element.classList.add('active');
             document.getElementById(tabId).classList.add('active');
 
-            // Invalidate size to fix Leaflet rendering in hidden div
             if (maps[tabId]) {
                 setTimeout(() => maps[tabId].invalidateSize(), 100);
+            }
+
+            if (tabId === 'corine' && !corineChart) {
+                updateCorineStats(1, document.querySelector('.depth-btn.active'));
             }
         }
 
@@ -115,7 +85,6 @@
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            // Adding the WMS layer from GeoServer
             L.tileLayer.wms("http://localhost:8080/geoserver/wms", {
                 layers: layerName,
                 format: 'image/png',
@@ -127,7 +96,73 @@
             maps[id === 'map-admin' ? 'admin-units' : 'density'] = map;
         }
 
-        // Initialize both maps
+        function updateCorineStats(level, btn) {
+            document.querySelectorAll('.depth-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            fetch(`/api/stats/corine?level=${level}`)
+                .then(res => res.json())
+                .then(data => {
+                    renderCorineChart(data);
+                })
+                .catch(err => console.error('Error fetching Corine stats:', err));
+        }
+
+        function renderCorineChart(data) {
+            const ctx = document.getElementById('corineChart').getContext('2d');
+
+            // Sort data by tree count descending
+            data.sort((a, b) => b.planted_trees - a.planted_trees);
+
+            const labels = data.map(d => d.label);
+            const counts = data.map(d => d.planted_trees);
+            const colors = data.map(d => `rgb(${d.rgb})`);
+
+            if (corineChart) {
+                corineChart.destroy();
+            }
+
+            corineChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Trees Planted',
+                        data: counts,
+                        backgroundColor: colors,
+                        borderColor: '#228B22',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Number of Trees' }
+                        },
+                        y: {
+                            ticks: {
+                                font: { size: 11 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.raw.toLocaleString()} trees`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         initMap('map-admin', 'koku_projekts:europe_adm_units');
         initMap('map-density', 'koku_projekts:koku_blivums_pa_regioniem');
     </script>

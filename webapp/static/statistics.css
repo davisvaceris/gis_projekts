@@ -1,0 +1,98 @@
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .header {
+            background-color: #228B22;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .back-button {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+            border: 1px solid white;
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+        .content {
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #ddd;
+        }
+        .tab {
+            padding: 10px 25px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #666;
+            transition: 0.3s;
+        }
+        .tab.active {
+            color: #228B22;
+            border-bottom: 3px solid #228B22;
+        }
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .tab-content.active {
+            display: block;
+        }
+        #map-admin, #map-density {
+            height: 500px;
+            width: 100%;
+            border-radius: 8px;
+        }
+        .corine-stats-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .depth-selector {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .depth-btn {
+            padding: 6px 18px;
+            border: 1px solid #228B22;
+            background: white;
+            color: #228B22;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .depth-btn.active {
+            background: #228B22;
+            color: white;
+        }
+        .chart-wrapper {
+            height: 500px;
+            position: relative;
+        }
+        .translate-container {
+            padding: 10px;
+            text-align: right;
+        }
+        .goog-te-banner-frame.skiptranslate { display: none !important; }
+        body { top: 0px !important; }
+        .goog-logo-link { display: none !important; }
